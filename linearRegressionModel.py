@@ -50,22 +50,21 @@ class LinearRegressionModel(BaseModel):
     def train(self) -> None:
         prices = self.data.prices
         signals = self.data.signals
-
-        # Log returns aligned to signals (return[t] = log(price[t]/price[t-1]))
         log_ret = np.log(prices).diff()
-
-        # Shift returns by -1 so features at t predict return at t+1
         fwd_ret = log_ret.shift(-1)
 
+        self._train_mse: dict[str, float] = {}
+        self._val_mse: dict[str, float] = {}
+        self._scalers: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+
         for asset in self.data.assets:
-            # Gather signal columns for this asset (e.g. INSTRUMENT_1_trend4, ...)
             sig_cols = [c for c in signals.columns if c.startswith(asset + "_")]
             if not sig_cols:
-                # Fallback: use mean return if no signals
                 self._mu[asset] = float(log_ret[asset].dropna().mean())
+                self._train_mse[asset] = float('nan')
+                self._val_mse[asset] = float('nan')
                 continue
 
-            # Build feature / target frame, drop NaN rows
             X = signals[sig_cols]
             y = fwd_ret[asset]
             mask = X.notna().all(axis=1) & y.notna()
@@ -74,22 +73,37 @@ class LinearRegressionModel(BaseModel):
 
             if len(y_valid) < 20:
                 self._mu[asset] = float(log_ret[asset].dropna().mean())
+                self._train_mse[asset] = float('nan')
+                self._val_mse[asset] = float('nan')
                 continue
 
-            # Train / validation split (time-ordered)
+            # Standardize features (z-score)
+            mean = X_valid.mean(axis=0)
+            std = X_valid.std(axis=0) + 1e-12
+            X_std = (X_valid - mean) / std
+            self._scalers[asset] = (mean, std)
+
+            # Train/validation split (time-ordered)
             split = int(len(y_valid) * self.train_frac)
-            X_train, y_train = X_valid[:split], y_valid[:split]
+            X_train, y_train = X_std[:split], y_valid[:split]
+            X_val, y_val = X_std[split:], y_valid[split:]
 
             model = LinearRegression()
             model.fit(X_train, y_train)
             self._models[asset] = model
 
-            # Predict expected return using latest available signals
+            # Predict expected return using latest available signals (standardized)
             latest_signals = signals[sig_cols].dropna().iloc[-1:].values
-            self._mu[asset] = float(model.predict(latest_signals)[0])
+            latest_std = (latest_signals - mean) / std
+            self._mu[asset] = float(model.predict(latest_std)[0])
+
+            # Compute train/val MSE
+            y_train_pred = model.predict(X_train)
+            y_val_pred = model.predict(X_val) if len(y_val) > 0 else np.array([])
+            self._train_mse[asset] = float(np.mean((y_train - y_train_pred) ** 2))
+            self._val_mse[asset] = float(np.mean((y_val - y_val_pred) ** 2)) if len(y_val) > 0 else float('nan')
 
         self._trained = True
-        # Weights are set by the PortfolioOptimizer, not the model itself
         self._weights = {a: 1.0 / self.data.n_assets for a in self.data.assets}
 
     # -----------------------------------------------------------------
@@ -103,3 +117,26 @@ class LinearRegressionModel(BaseModel):
         if self.cov_estimator is not None:
             return self.cov_estimator.covariance_matrix
         return self.data.prices.pct_change().dropna().cov().values
+
+    # -----------------------------------------------------------------
+    @property
+    def mse_per_asset(self) -> dict[str, float]:
+        """In-sample (train) mean squared error for each asset's regression."""
+        return getattr(self, '_train_mse', {})
+
+    @property
+    def val_mse_per_asset(self) -> dict[str, float]:
+        """Validation mean squared error for each asset's regression."""
+        return getattr(self, '_val_mse', {})
+
+    @property
+    def avg_mse(self) -> float:
+        """Average in-sample (train) MSE across all assets."""
+        mses = [v for v in self.mse_per_asset.values() if np.isfinite(v)]
+        return float(np.mean(mses)) if mses else float('nan')
+
+    @property
+    def avg_val_mse(self) -> float:
+        """Average validation MSE across all assets."""
+        mses = [v for v in self.val_mse_per_asset.values() if np.isfinite(v)]
+        return float(np.mean(mses)) if mses else float('nan')

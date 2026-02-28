@@ -16,6 +16,7 @@ from portfolioOptimizer import PortfolioOptimizer, PortfolioConfig
 
 import numpy as np
 import pandas as pd
+import argparse
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +95,12 @@ def run_pipeline(
     print(optimizer.summary())
     print(optimizer.metrics_str())
 
+    if hasattr(model, 'avg_mse'):
+        print(f"Average in-sample MSE (LR): {model.avg_mse:.6g}")
+
+    if hasattr(model, 'avg_val_mse'):
+        print(f"Average validation MSE (LR): {model.avg_val_mse:.6g}")
+
     if output_csv is not None:
         out_path = optimizer.to_csv(output_csv)
         print(f"\n  Wrote portfolio CSV to {out_path}")
@@ -105,6 +112,8 @@ def run_pipeline(
 # Entry point
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data_dir", type=str, default="data/2024-12-31", help="Path to data directory")
+    args = parser.parse_args()
     from linearRegressionModel import LinearRegressionModel
-
-    weights = run_pipeline(model_cls=LinearRegressionModel)
+    weights = run_pipeline(data_dir=args.data_dir, model_cls=LinearRegressionModel)
