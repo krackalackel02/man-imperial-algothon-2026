@@ -92,6 +92,7 @@ def run_pipeline(
     # 6. Output
     print("[6/6] Done.\n")
     print(optimizer.summary())
+    print(optimizer.metrics_str())
 
     if output_csv is not None:
         out_path = optimizer.to_csv(output_csv)
@@ -104,14 +105,6 @@ def run_pipeline(
 # Entry point
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    # -----------------------------------------------------------------
-    # Replace `None` below with your concrete model class, e.g.:
-    #
-    #   from my_model import MyModel
-    #   weights = run_pipeline(model_cls=MyModel)
-    # -----------------------------------------------------------------
-    print("Pipeline ready.  Provide a concrete BaseModel subclass to run.")
-    print("Example:")
-    print("  from main import run_pipeline")
-    print("  from my_model import MyModel")
-    print("  weights = run_pipeline(model_cls=MyModel)")
+    from linearRegressionModel import LinearRegressionModel
+
+    weights = run_pipeline(model_cls=LinearRegressionModel)

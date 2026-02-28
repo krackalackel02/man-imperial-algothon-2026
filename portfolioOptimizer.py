@@ -255,3 +255,54 @@ class PortfolioOptimizer:
         lines.append(f"\n  Sum of weights : {sum(self.weights.values()):.6f}")
         lines.append(f"  Sharpe ratio   : {self.sharpe_ratio:.6f}")
         return "\n".join(lines)
+
+    # -----------------------------------------------------------------
+    # Analytics / Metrics
+    # -----------------------------------------------------------------
+
+    @property
+    def mean_return(self) -> float:
+        """Expected mean return of the optimal portfolio."""
+        self._check_solved()
+        mu = np.array([self.expected_returns[a] for a in self.assets], dtype=float)
+        return float(mu @ self.weights_array)
+
+    @property
+    def volatility(self) -> float:
+        """Portfolio volatility (standard deviation, annualized if input is annualized)."""
+        self._check_solved()
+        cov = self.covariance
+        w = self.weights_array
+        return float(np.sqrt(w @ cov @ w))
+
+    @property
+    def max_drawdown(self) -> float:
+        """Maximum drawdown of the cumulative return series (in-sample)."""
+        self._check_solved()
+        # Reconstruct in-sample returns
+        mu = np.array([self.expected_returns[a] for a in self.assets], dtype=float)
+        # Assume returns are daily, use weights as fixed allocation
+        # (This is a simplification; for more accuracy, use actual historical returns)
+        returns = mu @ self.weights_array
+        # Simulate cumulative return
+        cum = np.cumprod(1 + np.full(252, returns))  # 1 year
+        peak = np.maximum.accumulate(cum)
+        drawdown = (cum - peak) / peak
+        return float(drawdown.min())
+
+    def metrics(self) -> dict:
+        """Return a dictionary of key portfolio metrics."""
+        return {
+            'sharpe_ratio': self.sharpe_ratio,
+            'mean_return': self.mean_return,
+            'volatility': self.volatility,
+            'max_drawdown': self.max_drawdown,
+        }
+
+    def metrics_str(self) -> str:
+        """Human-readable summary of key metrics."""
+        m = self.metrics()
+        return (f"Sharpe: {m['sharpe_ratio']:.4f}  "
+                f"Mean: {m['mean_return']:.4f}  "
+                f"Vol: {m['volatility']:.4f}  "
+                f"MaxDD: {m['max_drawdown']:.4f}")
