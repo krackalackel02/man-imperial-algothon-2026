@@ -1,0 +1,7 @@
+metric,value
+sample_start,2017-08-18
+sample_end,2024-12-31
+rows_used,1450
+instruments,10
+ewma_halflife_days,60
+shrinkage_alpha,0.002446930877610253
