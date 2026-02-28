@@ -38,8 +38,22 @@ class BaseModel(ABC):
 
     def __init__(self, data: MarketData) -> None:
         self.data = data
+        self._weights: dict[str, float] | None = None
+        self._trained: bool = False
 
     # -- required overrides --------------------------------------------------
+
+    @abstractmethod
+    def train(self) -> None:
+        """
+        Fit the model on ``self.data``.
+
+        Implementations should populate internal state so that
+        ``expected_returns()`` and ``covariance_matrix()`` return
+        meaningful values, and should set ``self._weights`` with the
+        final portfolio allocation.
+        """
+        ...
 
     @abstractmethod
     def expected_returns(self) -> dict[str, float]:
@@ -58,6 +72,21 @@ class BaseModel(ABC):
         ``self.data.assets``.
         """
         ...
+
+    # -- output property -----------------------------------------------------
+
+    @property
+    def weights(self) -> dict[str, float]:
+        """
+        Portfolio weights produced by ``train()``.
+
+        Raises ``RuntimeError`` if accessed before training.
+        """
+        if not self._trained or self._weights is None:
+            raise RuntimeError(
+                "Model has not been trained yet. Call .train() first."
+            )
+        return self._weights
 
     # -- convenience helpers -------------------------------------------------
 
